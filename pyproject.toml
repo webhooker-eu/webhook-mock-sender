@@ -1,0 +1,47 @@
+[project]
+name = "webhook-mock-sender"
+version = "0.1.0"
+description = "CLI and web form that send fake Stripe, GitHub and Shopify webhook events with a valid signature"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["webhook", "mock", "stripe", "github", "shopify", "hmac", "signature", "testing"]
+classifiers = [
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Software Development :: Testing :: Mocking",
+]
+dependencies = [
+    "fastapi>=0.115",
+    "httpx>=0.28",
+    "uvicorn>=0.32",
+]
+
+[project.urls]
+Homepage = "https://webhooker.eu/"
+Repository = "https://github.com/webhooker-eu/webhook-mock-sender"
+Issues = "https://github.com/webhooker-eu/webhook-mock-sender/issues"
+
+[project.scripts]
+webhook-mock-sender = "webhook_mock_sender.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "stripe>=11",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/webhook_mock_sender"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

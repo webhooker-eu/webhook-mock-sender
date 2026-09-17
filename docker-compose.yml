@@ -1,0 +1,11 @@
+services:
+  webhook-mock-sender:
+    build: .
+    image: webhook-mock-sender
+    restart: unless-stopped
+    ports:
+      # Published on localhost only: the form has no authentication.
+      - "127.0.0.1:${PORT:-8080}:8080"
+    extra_hosts:
+      # Lets the container reach an endpoint running on your machine on Linux too.
+      - "host.docker.internal:host-gateway"

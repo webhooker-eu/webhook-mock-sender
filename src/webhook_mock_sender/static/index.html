@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="description" content="Send fake Stripe, GitHub and Shopify webhook events with a valid signature to your endpoint. A free, open-source tool by Webhooker.">
+<title>Webhook Mock Sender by Webhooker</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none'%3E%3Crect width='32' height='32' rx='10' fill='%230f766e'/%3E%3Cpath d='M5 16H9.4L12.7 9l6.6 14 3.3-7H27' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preload" href="/static/fonts/figtree.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  @font-face { font-family: "Unbounded"; src: url("/static/fonts/unbounded.woff2") format("woff2"); font-weight: 200 900; font-display: swap; }
+  @font-face { font-family: "Figtree"; src: url("/static/fonts/figtree.woff2") format("woff2"); font-weight: 300 900; font-display: swap; }
+
+  :root {
+    --teal: #0f766e;
+    --paper: #ffffff;
+    --fog: #f3f5f1;
+    --rail: #e4e7e1;
+    --line: #d3d8cf;
+    --ink: #0a1411;
+    --text: #2b3531;
+    --text-muted: #5b6761;
+    --good: #12805c;
+    --good-wash: #e0f4ea;
+    --danger: #c5302a;
+    --danger-wash: #fdeeec;
+    --accent: #635bff;
+    --accent-deep: #4b44d6;
+    --accent-wash: #efeeff;
+    --font-display: "Unbounded", "Arial Black", system-ui, sans-serif;
+    --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-code: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  body[data-provider="github"] { --accent: #24292f; --accent-deep: #0d1117; --accent-wash: #eceef1; }
+  body[data-provider="shopify"] { --accent: #00805f; --accent-deep: #005e46; --accent-wash: #e3f3ee; }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--rail); color: var(--text); font: 15px/1.45 var(--font-body); }
+  button, input, textarea { font: inherit; color: inherit; }
+  a { color: var(--accent-deep); }
+
+  button {
+    border: 0;
+    background: var(--rail);
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.12s;
+  }
+  button:hover:not(:disabled) { background: var(--line); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.small { font-size: 13px; padding: 4px 10px; }
+  :is(button, input, textarea, a):focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  .app { height: 100%; display: grid; grid-template-columns: 72px minmax(360px, 460px) minmax(0, 1fr); }
+
+  /* Rail: Webhooker and its other tools */
+  .rail { background: var(--rail); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 0; }
+  .rail-item { position: relative; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; background: var(--paper); color: var(--text); text-decoration: none; transition: border-radius 0.15s, background-color 0.15s, color 0.15s; }
+  .rail-item svg { width: 26px; height: 26px; }
+  .rail-item:hover, .rail-item:focus-visible, .rail-item.home { border-radius: 16px; background: var(--teal); color: #fff; }
+  .rail-item.more { color: var(--teal); }
+  .rail-item.more:hover, .rail-item.more:focus-visible { color: #fff; }
+  .rail-item::before { content: ""; position: absolute; left: -12px; width: 4px; height: 0; border-radius: 0 4px 4px 0; background: var(--ink); transition: height 0.15s; }
+  .rail-item:hover::before, .rail-item:focus-visible::before { height: 20px; }
+  .rail-item.home::before { height: 40px; }
+  .rail-item::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 62px;
+    z-index: 10;
+    padding: 7px 12px;
+    border-radius: 8px;
+    background: var(--ink);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: scale(0.94);
+    transform-origin: left center;
+    transition: opacity 0.1s, transform 0.1s;
+  }
+  .rail-item:hover::after, .rail-item:focus-visible::after { opacity: 1; transform: none; }
+  .rail-divider { width: 32px; height: 2px; border-radius: 1px; background: var(--line); }
+  .rail-spacer { flex: 1; }
+
+  /* Builder: what to send and where */
+  .builder { background: var(--fog); overflow-y: auto; padding: 28px 20px 20px; border-radius: 12px 0 0 0; }
+  .builder-head h1 { margin: 0 0 8px; font: 800 25px/1.12 var(--font-display); letter-spacing: -0.02em; color: var(--ink); text-wrap: balance; }
+  .builder-head p { margin: 0 0 24px; color: var(--text-muted); max-width: 42ch; }
+  .builder section { margin-bottom: 26px; }
+  .builder h2 { margin: 0 0 10px; font-size: 16px; font-weight: 700; color: var(--ink); }
+
+  .provider-switch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--rail); padding: 4px; border-radius: 12px; }
+  .provider-switch button { background: transparent; padding: 9px 6px; border-radius: 9px; color: var(--text-muted); }
+  .provider-switch button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
+  .event-list { display: flex; flex-direction: column; gap: 2px; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 4px; max-height: 292px; overflow-y: auto; }
+  .event-option { display: block; width: 100%; text-align: left; background: transparent; padding: 7px 10px; border-radius: 7px; font-weight: 400; white-space: normal; }
+  .event-option .event-name { display: block; font: 600 13.5px/1.35 var(--font-code); color: var(--ink); overflow-wrap: anywhere; }
+  .event-option .event-description { display: block; font-size: 13px; color: var(--text-muted); }
+  .event-option[aria-pressed="true"] { background: var(--accent-wash); box-shadow: inset 3px 0 0 var(--accent); }
+  .event-option[aria-pressed="true"] .event-name { color: var(--accent-deep); }
+
+  .control { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 600; color: var(--text-muted); min-width: 0; margin-bottom: 12px; }
+  input[type="text"], input[type="url"], input[type="password"], textarea {
+    width: 100%;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-size: 15px;
+    font-weight: 400;
+    color: var(--text);
+  }
+  input::placeholder { color: #848f89; }
+  .input-row { display: flex; gap: 6px; }
+  .input-row input { min-width: 0; }
+  .input-row button { background: var(--paper); border: 1px solid var(--line); }
+  .checkbox { display: flex; align-items: flex-start; gap: 9px; font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 9px; }
+  .checkbox input { width: 17px; height: 17px; margin: 2px 0 0; flex: none; accent-color: var(--accent); }
+  .checkbox small { display: block; font-size: 13px; color: var(--text-muted); font-weight: 400; }
+  .note { color: var(--text-muted); font-size: 13px; margin: 0 0 10px; }
+
+  .credit { margin: 30px 0 0; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--text-muted); }
+  .credit a { color: var(--teal); }
+
+  /* Request: the signed HTTP request and the deliveries */
+  .request { background: var(--paper); display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .request-head { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--rail); flex-wrap: wrap; }
+  .request-line { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 1; font-family: var(--font-code); font-size: 14px; }
+  .request-line .method { font-weight: 700; color: var(--accent-deep); }
+  .request-line .target { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+  .tabs { display: flex; gap: 2px; background: var(--fog); padding: 3px; border-radius: 10px; }
+  .tabs button { background: transparent; padding: 5px 13px; font-size: 14px; color: var(--text-muted); border-radius: 7px; }
+  .tabs button:hover:not(:disabled) { background: var(--rail); }
+  .tabs button[aria-selected="true"] { background: var(--paper); color: var(--ink); box-shadow: 0 1px 2px rgba(10, 20, 17, 0.16); }
+
+  .workspace { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 16px 8px; }
+
+  .slip { position: relative; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .slip-headers { margin: 0; padding: 14px 196px 14px 16px; background: var(--fog); font: 13px/1.6 var(--font-code); display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 12px; }
+  .slip-headers dt { color: var(--text-muted); white-space: nowrap; }
+  .slip-headers dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+  .slip-headers .signature { color: var(--accent-deep); font-weight: 700; }
+  .slip-headers dd.signature { background: var(--accent-wash); border-radius: 4px; padding: 0 5px; margin-left: -5px; }
+  .slip-problem { margin: 0; padding: 14px 150px 14px 16px; background: var(--fog); color: var(--text-muted); }
+  .slip-problem.bad { color: var(--danger); font-weight: 600; }
+
+  .stamp { position: absolute; top: 16px; right: 18px; padding: 8px 12px 7px; border: 2.5px solid currentColor; border-radius: 9px; color: var(--accent); font: 800 13px/1.1 var(--font-display); text-align: center; transform: rotate(-7deg); background: color-mix(in srgb, var(--paper) 70%, transparent); pointer-events: none; }
+  .stamp small { display: block; margin-top: 3px; font: 600 10.5px/1 var(--font-body); letter-spacing: 0.02em; }
+  .stamp.forged { color: var(--danger); transform: rotate(5deg); }
+  .stamp.unsigned { color: var(--text-muted); border-style: dashed; }
+  .stamp.pressed { animation: press 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.3); }
+  @keyframes press { from { opacity: 0; scale: 1.5; } }
+
+  .signature-recipe { padding: 10px 16px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 13px; color: var(--text-muted); }
+  .signature-recipe code { font-family: var(--font-code); font-size: 12.5px; color: var(--ink); }
+
+  .body-head { display: flex; align-items: center; gap: 10px; padding: 8px 10px 0 16px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+  .body-head .body-state { flex: 1; font-weight: 500; }
+  .body-head .body-state.bad { color: var(--danger); font-weight: 600; }
+  #body-editor { display: block; border: 0; border-radius: 0; min-height: 320px; padding: 10px 16px 16px; resize: vertical; font: 13px/1.55 var(--font-code); color: var(--ink); tab-size: 2; white-space: pre; overflow: auto; }
+  #body-editor:focus-visible { outline-offset: -3px; }
+
+  pre.code-output { margin: 0; padding: 16px; background: var(--fog); border-radius: 12px; font: 13px/1.55 var(--font-code); white-space: pre-wrap; word-break: break-word; }
+  .code-box { position: relative; }
+  .code-box button { position: absolute; top: 10px; right: 10px; background: var(--paper); border: 1px solid var(--line); }
+
+  .log-title { display: flex; align-items: center; gap: 8px; margin: 22px 0 8px; font-size: 12px; font-weight: 700; color: var(--text-muted); }
+  .log-title::after { content: ""; flex: 1; height: 1px; background: var(--rail); }
+  .log-empty { color: var(--text-muted); font-size: 14px; margin: 0 0 12px; max-width: 62ch; }
+  .delivery { border-left: 4px solid var(--good); background: var(--fog); border-radius: 4px 10px 10px 4px; padding: 10px 14px; margin-bottom: 8px; }
+  .delivery.failed { border-left-color: var(--danger); background: var(--danger-wash); }
+  .delivery.landed { animation: land 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+  @keyframes land { from { opacity: 0; transform: translateY(14px); } }
+  .delivery-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted); }
+  .delivery-head .event { font-family: var(--font-code); color: var(--ink); font-weight: 600; }
+  .pill { border-radius: 999px; padding: 1px 9px; font-weight: 700; font-variant-numeric: tabular-nums; background: var(--paper); color: var(--text); }
+  .pill.ok { background: var(--good-wash); color: var(--good); }
+  .pill.bad { background: var(--paper); color: var(--danger); }
+  .delivery p { margin: 6px 0 0; font-size: 14px; }
+  .delivery p.error { color: var(--danger); font-weight: 600; }
+  .delivery pre { margin: 8px 0 0; padding: 8px 10px; background: var(--paper); border-radius: 6px; font: 12.5px/1.5 var(--font-code); white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow: auto; }
+
+  .composer { margin: 0 16px 20px; padding: 8px 8px 8px 16px; border-radius: 12px; background: var(--fog); display: flex; align-items: center; gap: 12px; }
+  .composer-text { flex: 1; min-width: 0; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .composer-text strong { color: var(--ink); }
+  .send-button { display: flex; align-items: center; gap: 8px; background: var(--accent); color: #fff; padding: 10px 18px; border-radius: 9px; font-size: 15px; }
+  .send-button:hover:not(:disabled) { background: var(--accent-deep); }
+  .send-button svg { width: 18px; height: 18px; }
+
+  @media (max-width: 920px) {
+    html, body { height: auto; }
+    .app { height: auto; grid-template-columns: minmax(0, 1fr); }
+    .rail { flex-direction: row; justify-content: flex-start; padding: 8px 12px; }
+    .rail-item { width: 40px; height: 40px; }
+    .rail-item::before, .rail-item::after, .rail-divider { display: none; }
+    .builder { border-radius: 12px 12px 0 0; overflow: visible; }
+    .workspace { overflow: visible; }
+    .composer { position: sticky; bottom: 12px; box-shadow: 0 6px 24px rgba(10, 20, 17, 0.18); }
+  }
+  @media (max-width: 560px) {
+    .slip-headers { grid-template-columns: minmax(0, 1fr); padding: 58px 14px 12px; }
+    .slip-headers dd { margin-bottom: 4px; }
+    .slip-problem { padding: 58px 14px 12px; }
+    .stamp { top: 10px; right: 12px; }
+    .composer-text { display: none; }
+    .send-button { flex: 1; justify-content: center; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body data-provider="stripe">
+<div class="app">
+  <nav class="rail" aria-label="Webhooker">
+    <a class="rail-item home" href="https://webhooker.eu/" target="_blank" rel="noopener" data-tooltip="Webhooker: never lose a webhook" aria-label="Webhooker website">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M4 16h4.6L12.2 8l7.6 16 3.6-8H28" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+    <span class="rail-divider"></span>
+    <a class="rail-item" href="https://github.com/webhooker-eu/webhook-tester" target="_blank" rel="noopener" data-tooltip="webhook-tester: inspect incoming webhooks" aria-label="webhook-tester, another Webhooker tool">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 13h4l2 3h4l2-3h4M6 5h12l2 8v6H4v-6l2-8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+    <a class="rail-item" href="https://github.com/webhooker-eu/discord-webhook-tester" target="_blank" rel="noopener" data-tooltip="discord-webhook-tester: test a Discord webhook" aria-label="discord-webhook-tester, another Webhooker tool">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-4 3.5V17H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+    </a>
+    <a class="rail-item more" href="https://github.com/webhooker-eu" target="_blank" rel="noopener" data-tooltip="More free tools by Webhooker" aria-label="More free tools by Webhooker">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+    </a>
+    <span class="rail-spacer"></span>
+    <a class="rail-item" href="https://github.com/webhooker-eu/webhook-mock-sender" target="_blank" rel="noopener" data-tooltip="Source code on GitHub" aria-label="Source code on GitHub">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.1.39-1.99 1.03-2.69-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.3 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.69 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2z"/></svg>
+    </a>
+  </nav>
+
+  <form class="builder" id="builder-form" autocomplete="off" novalidate>
+    <header class="builder-head">
+      <h1>Send a signed mock webhook</h1>
+      <p>Pick an event, point it at your endpoint and see whether your signature check lets it in.</p>
+    </header>
+
+    <section>
+      <h2>Provider</h2>
+      <div class="provider-switch" id="provider-switch" role="group" aria-label="Provider"></div>
+    </section>
+
+    <section>
+      <h2>Event</h2>
+      <div class="event-list" id="event-list" role="group" aria-label="Event"></div>
+    </section>
+
+    <section>
+      <h2>Your endpoint</h2>
+      <label class="control">
+        <span>URL that receives the webhook</span>
+        <input id="target-url" type="url" placeholder="http://localhost:3000/webhooks/stripe" spellcheck="false">
+      </label>
+      <label class="control">
+        <span id="secret-label">Signing secret</span>
+        <span class="input-row">
+          <input id="secret" type="password" spellcheck="false" autocomplete="off">
+          <button id="toggle-secret-button" type="button" aria-pressed="false">Show</button>
+        </span>
+      </label>
+      <p class="note">Use the same secret your endpoint checks against. It stays on this machine.</p>
+      <label class="checkbox"><input id="remember-secret" type="checkbox"> Remember the secret in this browser</label>
+    </section>
+
+    <section>
+      <h2>What should go wrong</h2>
+      <label class="checkbox">
+        <input id="invalid-signature" type="checkbox">
+        <span>Wrong signature<small>Signed with another secret. Your endpoint should answer 400 or 401.</small></span>
+      </label>
+      <label class="checkbox" id="stale-timestamp-row">
+        <input id="stale-timestamp" type="checkbox">
+        <span>Replay of an old request<small>The signed time is 10 minutes ago, outside Stripe's 5 minute tolerance.</small></span>
+      </label>
+      <label class="checkbox">
+        <input id="send-twice" type="checkbox">
+        <span>Duplicate delivery<small>The same event is sent twice. Your handler should process it once.</small></span>
+      </label>
+    </section>
+
+    <p class="credit">
+      A free tool by <a href="https://webhooker.eu/" target="_blank" rel="noopener">Webhooker</a>, the EU-hosted gateway
+      that receives, verifies, stores and replays your webhooks.
+      <a href="https://github.com/webhooker-eu/webhook-mock-sender" target="_blank" rel="noopener">Source on GitHub</a>.
+    </p>
+  </form>
+
+  <section class="request" aria-label="Signed request">
+    <header class="request-head">
+      <div class="request-line"><span class="method">POST</span><span class="target" id="request-target"></span></div>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" data-tab="request" aria-selected="true">Request</button>
+        <button type="button" role="tab" data-tab="curl" aria-selected="false">curl</button>
+        <button type="button" role="tab" data-tab="cli" aria-selected="false">CLI</button>
+      </div>
+    </header>
+
+    <div class="workspace" id="workspace">
+      <div id="tab-request">
+        <div class="slip">
+          <div class="stamp unsigned" id="stamp" aria-live="polite"></div>
+          <dl class="slip-headers" id="slip-headers" hidden></dl>
+          <p class="slip-problem" id="slip-problem"></p>
+          <div class="signature-recipe" id="signature-recipe"></div>
+          <div class="body-head">
+            <span>Body</span>
+            <span class="body-state" id="body-state"></span>
+            <button id="new-sample-button" type="button" class="small">New sample</button>
+          </div>
+          <textarea id="body-editor" aria-label="Request body, JSON" spellcheck="false"></textarea>
+        </div>
+      </div>
+      <div class="code-box" id="tab-code" hidden>
+        <button id="copy-code-button" type="button" class="small">Copy</button>
+        <pre class="code-output" id="code-output"></pre>
+      </div>
+
+      <div class="log-title">Deliveries</div>
+      <p class="log-empty" id="log-empty">Nothing sent yet. Each delivery shows the status, the time it took and what your endpoint answered.</p>
+      <div id="delivery-log" aria-live="polite"></div>
+    </div>
+
+    <div class="composer">
+      <span class="composer-text" id="composer-text"></span>
+      <button id="send-button" class="send-button" type="submit" form="builder-form">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6 3 10l12 2-12 2 .4 6.4z"/></svg>
+        Send webhook
+      </button>
+    </div>
+  </section>
+</div>
+
+<script>
+  const SETTINGS_STORAGE_KEY = "webhook-mock-sender:settings";
+  const SECRET_STORAGE_KEY = "webhook-mock-sender:secret";
+  const STALE_TIMESTAMP_OFFSET_SECONDS = -600;
+  const PREVIEW_DELAY_MS = 250;
+  const REFUSAL_STATUS_CODES = [400, 401, 403];
+  const TARGET_URL_PLACEHOLDER = "$WEBHOOK_MOCK_URL";
+
+  const elements = Object.fromEntries(
+    [...document.querySelectorAll("[id]")].map((element) => [element.id, element])
+  );
+
+  let providers = [];
+  let settings = loadSettings();
+  let activeTab = "request";
+  let isBodyEdited = false;
+  let curlCommand = "";
+  let lastStampText = "";
+  let previewTimer = null;
+  let previewSequence = 0;
+
+  function loadSettings() {
+    const defaultSettings = { provider: "stripe", events: {}, targetUrl: "", invalidSignature: false, staleTimestamp: false, sendTwice: false };
+    try {
+      return { ...defaultSettings, ...JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY)) };
+    } catch {
+      return defaultSettings;
+    }
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    } catch {}
+  }
+
+  function createElement(tagName, properties = {}, children = []) {
+    const element = document.createElement(tagName);
+    Object.assign(element, properties);
+    element.append(...children);
+    return element;
+  }
+
+  function getProvider() {
+    return providers.find((provider) => provider.key === settings.provider) ?? providers[0];
+  }
+
+  function getEventName() {
+    const provider = getProvider();
+    const storedEventName = settings.events[provider.key];
+    const isKnownEvent = provider.events.some((event) => event.name === storedEventName);
+    return isKnownEvent ? storedEventName : provider.events[0].name;
+  }
+
+  function usesStaleTimestamp() {
+    return settings.staleTimestamp && getProvider().key === "stripe";
+  }
+
+  async function postJson(path, body) {
+    const response = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const result = await response.json();
+    if (response.status === 422 && Array.isArray(result.detail)) {
+      const invalidInputs = result.detail.map((issue) => `${issue.loc.slice(1).join(".")}: ${issue.msg}`);
+      return { ok: false, error: `The form has invalid values (${invalidInputs.join("; ")})` };
+    }
+    return result;
+  }
+
+  function buildRequestInput() {
+    return {
+      provider: getProvider().key,
+      event: getEventName(),
+      secret: elements["secret"].value,
+      body: elements["body-editor"].value,
+      target_url: elements["target-url"].value.trim(),
+      use_invalid_signature: settings.invalidSignature,
+      timestamp_offset_seconds: usesStaleTimestamp() ? STALE_TIMESTAMP_OFFSET_SECONDS : 0,
+    };
+  }
+
+  function renderProviderSwitch() {
+    elements["provider-switch"].replaceChildren(...providers.map((provider) => {
+      const button = createElement("button", { type: "button", textContent: provider.display_name });
+      button.setAttribute("aria-pressed", String(provider.key === getProvider().key));
+      button.addEventListener("click", () => selectProvider(provider.key));
+      return button;
+    }));
+  }
+
+  function renderEventList() {
+    const selectedEventName = getEventName();
+    elements["event-list"].replaceChildren(...getProvider().events.map((event) => {
+      const option = createElement("button", { type: "button", className: "event-option" }, [
+        createElement("span", { className: "event-name", textContent: event.name }),
+        createElement("span", { className: "event-description", textContent: event.description }),
+      ]);
+      option.setAttribute("aria-pressed", String(event.name === selectedEventName));
+      option.addEventListener("click", () => selectEvent(event.name));
+      return option;
+    }));
+  }
+
+  function renderProviderDetails() {
+    const provider = getProvider();
+    document.body.dataset.provider = provider.key;
+    elements["secret-label"].textContent = `Signing secret (${provider.secret_environment_variable})`;
+    elements["secret"].placeholder = provider.secret_placeholder;
+    elements["target-url"].placeholder = `http://localhost:3000/webhooks/${provider.key}`;
+    elements["stale-timestamp-row"].hidden = provider.key !== "stripe";
+    elements["signature-recipe"].replaceChildren(
+      createElement("code", { textContent: provider.signature_header }),
+      " is ",
+      createElement("code", { textContent: provider.signature_summary }),
+      ". ",
+      createElement("a", { href: provider.documentation_url, target: "_blank", rel: "noopener noreferrer", textContent: `How ${provider.display_name} signs webhooks` }),
+    );
+  }
+
+  function renderTarget() {
+    const targetUrl = elements["target-url"].value.trim();
+    elements["request-target"].textContent = targetUrl || "your endpoint";
+    const composerText = elements["composer-text"];
+    if (!targetUrl) {
+      composerText.textContent = "Enter your endpoint URL to send this request";
+    } else {
+      const deliveryCount = settings.sendTwice ? "twice" : "once";
+      composerText.replaceChildren("Send ", createElement("strong", { textContent: getEventName() }), ` ${deliveryCount}`);
+    }
+  }
+
+  function renderStamp(className, title, subtitle) {
+    const stamp = elements["stamp"];
+    const stampText = `${className}|${title}|${subtitle}`;
+    stamp.className = `stamp ${className}`.trim();
+    stamp.replaceChildren(title, createElement("small", { textContent: subtitle }));
+    if (stampText !== lastStampText) {
+      void stamp.offsetWidth;
+      stamp.classList.add("pressed");
+      lastStampText = stampText;
+    }
+  }
+
+  function renderSignedRequest(request) {
+    const signatureHeader = getProvider().signature_header.toLowerCase();
+    const headerRows = Object.entries(request.headers).flatMap(([name, value]) => {
+      const className = name.toLowerCase() === signatureHeader ? "signature" : "";
+      return [createElement("dt", { className, textContent: name }), createElement("dd", { className, textContent: value })];
+    });
+    elements["slip-headers"].replaceChildren(...headerRows);
+    elements["slip-headers"].hidden = false;
+    elements["slip-problem"].hidden = true;
+    if (!request.is_signature_valid) {
+      renderStamp("forged", "wrong signature", "should be refused");
+    } else if (usesStaleTimestamp()) {
+      renderStamp("forged", "signed, stale", "10 minutes old");
+    } else {
+      renderStamp("", "signed", "HMAC-SHA256");
+    }
+  }
+
+  function renderPreviewProblem(problem, isError) {
+    elements["slip-headers"].hidden = true;
+    elements["slip-problem"].hidden = false;
+    elements["slip-problem"].textContent = problem;
+    elements["slip-problem"].className = isError ? "slip-problem bad" : "slip-problem";
+    renderStamp("unsigned", "not signed", "needs a secret");
+    curlCommand = "";
+  }
+
+  function quoteForShell(text) {
+    return `'${text.replaceAll("'", `'\\''`)}'`;
+  }
+
+  function buildCliCommand() {
+    const options = [];
+    if (settings.invalidSignature) options.push("--invalid-signature");
+    if (usesStaleTimestamp()) options.push(`--timestamp-offset ${STALE_TIMESTAMP_OFFSET_SECONDS}`);
+    if (settings.sendTwice) options.push("--repeat 2");
+    const targetUrl = elements["target-url"].value.trim();
+    const command = [
+      `export ${getProvider().secret_environment_variable}=${quoteForShell(elements["secret"].value ? "<your signing secret>" : "")}`,
+      "",
+      [`webhook-mock-sender send ${getProvider().key} ${quoteForShell(getEventName())} ${quoteForShell(targetUrl || TARGET_URL_PLACEHOLDER)}`, ...options].join(" \\\n  "),
+    ];
+    if (isBodyEdited) {
+      command[2] += ` \\\n  --payload-file - <<'JSON'\n${elements["body-editor"].value}\nJSON`;
+    }
+    return command.join("\n");
+  }
+
+  function renderTabs() {
+    elements["tab-request"].hidden = activeTab !== "request";
+    elements["tab-code"].hidden = activeTab === "request";
+    if (activeTab === "curl") {
+      elements["code-output"].textContent = curlCommand || "Enter a signing secret and a valid JSON body to get a curl command.";
+    }
+    if (activeTab === "cli") elements["code-output"].textContent = buildCliCommand();
+  }
+
+  function renderBodyState() {
+    const bodyState = elements["body-state"];
+    try {
+      JSON.parse(elements["body-editor"].value);
+      bodyState.textContent = isBodyEdited ? "edited, signed exactly as typed" : "fresh sample, edit anything";
+      bodyState.className = "body-state";
+      return true;
+    } catch (error) {
+      bodyState.textContent = `not valid JSON: ${error.message}`;
+      bodyState.className = "body-state bad";
+      return false;
+    }
+  }
+
+  async function refreshPreview() {
+    const sequence = ++previewSequence;
+    renderTarget();
+    const isBodyValid = renderBodyState();
+    if (!elements["secret"].value) {
+      renderPreviewProblem("Enter the signing secret to see the signed headers.", false);
+    } else if (!isBodyValid) {
+      renderPreviewProblem("Fix the JSON body to sign the request.", true);
+    } else {
+      try {
+        const result = await postJson("/api/preview", buildRequestInput());
+        if (sequence !== previewSequence) return;
+        if (result.ok) {
+          curlCommand = result.curl;
+          renderSignedRequest(result.request);
+        } else {
+          renderPreviewProblem(result.error, true);
+        }
+      } catch (error) {
+        if (sequence !== previewSequence) return;
+        renderPreviewProblem(`The local server did not respond (${error.message}).`, true);
+      }
+    }
+    renderTabs();
+  }
+
+  function schedulePreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(refreshPreview, PREVIEW_DELAY_MS);
+  }
+
+  async function loadSample() {
+    const result = await postJson("/api/template", { provider: getProvider().key, event: getEventName() });
+    if (result.ok) {
+      elements["body-editor"].value = result.body;
+      isBodyEdited = false;
+    }
+    await refreshPreview();
+  }
+
+  function selectProvider(providerKey) {
+    settings.provider = providerKey;
+    saveSettings();
+    renderProviderSwitch();
+    renderEventList();
+    renderProviderDetails();
+    loadSample();
+  }
+
+  function selectEvent(eventName) {
+    settings.events[getProvider().key] = eventName;
+    saveSettings();
+    renderEventList();
+    loadSample();
+  }
+
+  function buildDeliveryElement(delivery, deliveryLabel, shouldBeRefused = false) {
+    const statusText = delivery.status_code ? `HTTP ${delivery.status_code}` : "No response";
+    const wasRefused = REFUSAL_STATUS_CODES.includes(delivery.status_code);
+    const isExpected = shouldBeRefused ? wasRefused : delivery.ok;
+    const entry = createElement("div", { className: isExpected ? "delivery landed" : "delivery failed landed" }, [
+      createElement("div", { className: "delivery-head" }, [
+        createElement("span", { className: isExpected ? "pill ok" : "pill bad", textContent: statusText }),
+        createElement("span", { className: "pill", textContent: `${delivery.elapsed_ms} ms` }),
+        createElement("span", { className: "event", textContent: deliveryLabel }),
+        createElement("span", { textContent: new Date().toLocaleTimeString() }),
+      ]),
+    ]);
+    if (delivery.error && !isExpected) entry.append(createElement("p", { className: "error", textContent: delivery.error }));
+    if (delivery.ok && !isExpected) entry.append(createElement("p", { className: "error", textContent: "The endpoint accepted a request it should have refused" }));
+    if (delivery.hint) entry.append(createElement("p", { textContent: delivery.hint }));
+    if (delivery.response_body) entry.append(createElement("pre", { textContent: delivery.response_body }));
+    return entry;
+  }
+
+  function appendProblem(problem) {
+    const failure = { ok: false, status_code: null, elapsed_ms: 0, error: problem };
+    elements["delivery-log"].prepend(buildDeliveryElement(failure, getEventName()));
+    elements["log-empty"].hidden = true;
+  }
+
+  async function sendWebhook(event) {
+    event.preventDefault();
+    if (!elements["target-url"].value.trim()) {
+      elements["target-url"].focus();
+      return appendProblem("Enter the URL of your endpoint first, like http://localhost:3000/webhooks.");
+    }
+    if (!elements["secret"].value) {
+      elements["secret"].focus();
+      return appendProblem("Enter the signing secret your endpoint verifies against.");
+    }
+    elements["send-button"].disabled = true;
+    try {
+      const result = await postJson("/api/send", { ...buildRequestInput(), repeat: settings.sendTwice ? 2 : 1 });
+      if (!result.ok) return appendProblem(result.error);
+      const shouldBeRefused = !result.request.is_signature_valid || result.request.is_timestamp_stale;
+      const scenario = [
+        result.request.is_signature_valid ? "" : ", wrong signature",
+        result.request.is_timestamp_stale ? ", stale timestamp" : "",
+      ].join("");
+      const entries = result.deliveries.map((delivery, deliveryIndex) => {
+        const position = result.deliveries.length > 1 ? ` (${deliveryIndex + 1} of ${result.deliveries.length})` : "";
+        return buildDeliveryElement(delivery, `${result.request.event}${scenario}${position}`, shouldBeRefused);
+      });
+      elements["delivery-log"].prepend(...entries.reverse());
+      elements["log-empty"].hidden = true;
+      if (!isBodyEdited) await loadSample();
+    } catch (error) {
+      appendProblem(`The local server did not respond (${error.message}).`);
+    } finally {
+      elements["send-button"].disabled = false;
+    }
+  }
+
+  function persistSecret() {
+    try {
+      if (elements["remember-secret"].checked) {
+        localStorage.setItem(SECRET_STORAGE_KEY, elements["secret"].value);
+      } else {
+        localStorage.removeItem(SECRET_STORAGE_KEY);
+      }
+    } catch {}
+  }
+
+  function restoreForm() {
+    elements["target-url"].value = settings.targetUrl;
+    elements["invalid-signature"].checked = settings.invalidSignature;
+    elements["stale-timestamp"].checked = settings.staleTimestamp;
+    elements["send-twice"].checked = settings.sendTwice;
+    try {
+      const storedSecret = localStorage.getItem(SECRET_STORAGE_KEY);
+      if (storedSecret) {
+        elements["secret"].value = storedSecret;
+        elements["remember-secret"].checked = true;
+      }
+    } catch {}
+  }
+
+  function bindScenario(elementId, settingName) {
+    elements[elementId].addEventListener("change", () => {
+      settings[settingName] = elements[elementId].checked;
+      saveSettings();
+      refreshPreview();
+    });
+  }
+
+  elements["builder-form"].addEventListener("submit", sendWebhook);
+  elements["target-url"].addEventListener("input", () => {
+    settings.targetUrl = elements["target-url"].value.trim();
+    saveSettings();
+    schedulePreview();
+  });
+  elements["secret"].addEventListener("input", () => {
+    persistSecret();
+    schedulePreview();
+  });
+  elements["remember-secret"].addEventListener("change", persistSecret);
+  elements["toggle-secret-button"].addEventListener("click", () => {
+    const isVisible = elements["secret"].type === "text";
+    elements["secret"].type = isVisible ? "password" : "text";
+    elements["toggle-secret-button"].textContent = isVisible ? "Show" : "Hide";
+    elements["toggle-secret-button"].setAttribute("aria-pressed", String(!isVisible));
+  });
+  bindScenario("invalid-signature", "invalidSignature");
+  bindScenario("stale-timestamp", "staleTimestamp");
+  bindScenario("send-twice", "sendTwice");
+  elements["body-editor"].addEventListener("input", () => {
+    isBodyEdited = true;
+    schedulePreview();
+  });
+  elements["new-sample-button"].addEventListener("click", loadSample);
+  document.querySelectorAll("[data-tab]").forEach((tabButton) => {
+    tabButton.addEventListener("click", () => {
+      activeTab = tabButton.dataset.tab;
+      document.querySelectorAll("[data-tab]").forEach((button) => button.setAttribute("aria-selected", String(button === tabButton)));
+      renderTabs();
+    });
+  });
+  elements["copy-code-button"].addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(elements["code-output"].textContent);
+      elements["copy-code-button"].textContent = "Copied";
+    } catch {
+      // The Clipboard API needs a secure context; over plain HTTP select the text for a manual copy.
+      getSelection().selectAllChildren(elements["code-output"]);
+      elements["copy-code-button"].textContent = "Press Ctrl+C";
+    }
+    setTimeout(() => { elements["copy-code-button"].textContent = "Copy"; }, 1500);
+  });
+
+  async function start() {
+    restoreForm();
+    try {
+      providers = await (await fetch("/api/providers")).json();
+    } catch (error) {
+      return renderPreviewProblem(`The local server did not respond (${error.message}).`, true);
+    }
+    renderProviderSwitch();
+    renderEventList();
+    renderProviderDetails();
+    await loadSample();
+  }
+
+  start();
+</script>
+</body>
+</html>

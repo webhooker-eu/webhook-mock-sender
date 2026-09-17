@@ -1,0 +1,14 @@
+**/__pycache__
+**/*.py[cod]
+.venv
+.git
+.gitignore
+.pytest_cache
+.playwright-mcp
+.claude
+.idea
+.vscode
+.env
+.env.*
+tests
+docs
