@@ -16,6 +16,8 @@
 
 <p align="center">
   <a href="https://webhooker.eu/"><img src="https://img.shields.io/badge/made%20by-Webhooker-0f766e" alt="Made by Webhooker" /></a>
+  <a href="https://github.com/webhooker-eu/webhook-mock-sender/actions/workflows/ci.yml"><img src="https://github.com/webhooker-eu/webhook-mock-sender/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/webhooker-eu/webhook-mock-sender/pkgs/container/webhook-mock-sender"><img src="https://github.com/webhooker-eu/webhook-mock-sender/actions/workflows/docker.yml/badge.svg" alt="Docker image" /></a>
   <img src="https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/backend-FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/packaging-uv-DE5FE9?logo=uv&logoColor=white" alt="uv" />
@@ -70,6 +72,15 @@ uvx --from git+https://github.com/webhooker-eu/webhook-mock-sender \
 Stripe payment_intent.succeeded → http://localhost:3000/webhooks/stripe
 ✓ Delivery: HTTP 200 in 12 ms
   response    {"received": true}
+```
+
+Or with Docker, nothing else installed (`host.docker.internal` is your machine as seen from the
+container):
+
+```bash
+docker run --rm --add-host host.docker.internal:host-gateway -e STRIPE_WEBHOOK_SECRET \
+  ghcr.io/webhooker-eu/webhook-mock-sender \
+  send stripe payment_intent.succeeded http://host.docker.internal:3000/webhooks/stripe
 ```
 
 Or install it as a command:
@@ -236,19 +247,29 @@ only if you tick **Remember the secret in this browser**.
 ### Docker
 
 ```bash
+docker run --rm -p 127.0.0.1:8080:8080 --add-host host.docker.internal:host-gateway \
+  ghcr.io/webhooker-eu/webhook-mock-sender                  # http://localhost:8080
+```
+
+Inside a container `localhost` is the container itself. To reach an app running on your machine,
+use `http://host.docker.internal:3000/...` as the endpoint. The image is built for `linux/amd64`
+and `linux/arm64`, and works as the CLI too:
+
+```bash
+docker run --rm --add-host host.docker.internal:host-gateway -e STRIPE_WEBHOOK_SECRET \
+  ghcr.io/webhooker-eu/webhook-mock-sender \
+  send stripe invoice.paid http://host.docker.internal:3000/webhooks/stripe
+```
+
+Prefer to build it yourself?
+
+```bash
 git clone https://github.com/webhooker-eu/webhook-mock-sender.git
 cd webhook-mock-sender
 docker compose up -d --build            # http://localhost:8080
 ```
 
-Inside a container `localhost` is the container itself. To reach an app running on your machine,
-use `http://host.docker.internal:3000/...` as the endpoint. Set `PORT` in a `.env` file to publish
-a different host port. The same image works as the CLI:
-
-```bash
-docker run --rm --add-host host.docker.internal:host-gateway -e STRIPE_WEBHOOK_SECRET \
-  webhook-mock-sender send stripe invoice.paid http://host.docker.internal:3000/webhooks/stripe
-```
+Set `PORT` in a `.env` file to publish a different host port.
 
 ### HTTP API
 
@@ -326,6 +347,7 @@ ingest URL like `https://app.webhooker.eu/in/{token}`.
 │   ├── web.py             # FastAPI app behind the web form
 │   └── static/            # Single-file UI (vanilla JS, no build step) and bundled fonts
 ├── tests/                 # pytest suite, no network access needed
+├── .github/workflows/     # CI, GHCR image and PyPI publishing
 ├── Dockerfile             # python-slim + uv, runs as a non-root user
 ├── docker-compose.yml
 ├── pyproject.toml         # Dependencies, managed with uv
